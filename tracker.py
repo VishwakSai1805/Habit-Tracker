@@ -57,9 +57,22 @@ if 'data_loaded' not in st.session_state:
             st.session_state.habit_list = cloud_data['habit_list']
             
             # Reconstruct the memory dictionaries back into Pandas DataFrames
-            st.session_state.memory = {
-                k: pd.read_json(io.StringIO(v)) for k, v in cloud_data['memory'].items()
-            }
+            st.session_state.memory = {}
+            for k, v in cloud_data['memory'].items():
+                df = pd.read_json(io.StringIO(v))
+                
+                # THE FIX: Stop Pandas from defaulting to the year 0001
+                fixed_cols = []
+                for col in df.columns:
+                    if isinstance(col, pd.Timestamp):
+                        fixed_cols.append(col.strftime("%b %d"))
+                    elif isinstance(col, str) and "0001" in col:
+                        fixed_cols.append(pd.to_datetime(col).strftime("%b %d"))
+                    else:
+                        fixed_cols.append(col)
+                df.columns = fixed_cols
+                
+                st.session_state.memory[k] = df
             
             # Reconstruct deadlines and ensure the date format is correct
             deadlines = pd.read_json(io.StringIO(cloud_data['deadlines_df']))
@@ -80,7 +93,7 @@ if 'data_loaded' not in st.session_state:
         st.session_state.memory = {}
         st.session_state.deadlines_df = pd.DataFrame(
             columns=["Done", "Task", "Deadline"],
-            data=[[False, "Submit Microeconomics Assignment", datetime.date.today() + datetime.timedelta(days=3)]]
+            data=[[False, "Deadline 1", datetime.date.today() + datetime.timedelta(days=3)]]
         )
         save_data() # Instantly save defaults to the cloud
         
