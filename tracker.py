@@ -8,7 +8,7 @@ import requests
 import io
 
 # --- PAGE SETUP ---
-st.set_page_config(layout="wide", page_title="Dark Mode Tracker", page_icon="🌙")
+st.set_page_config(layout="wide", page_title="Daily Habit Tracker", page_icon="💖")
 
 # --- CLOUD STORAGE SYSTEM (JSONBin) ---
 # We pull these securely from Streamlit's secret vault
@@ -71,11 +71,11 @@ if 'data_loaded' not in st.session_state:
     except Exception as e:
         # If it fails (or first time running), load the defaults
         st.session_state.habit_list = [
-            "Work on MineGuard 🛠️", 
-            "Pandas/SQL Module 💻", 
-            "Cyber Dojo Security+ Quiz 🛡️", 
-            "STM32 Troubleshooting ⚙️",
-            "Cycling Training 🚴‍♂️"
+            "Habit 1", 
+            "Habit 2", 
+            "Habit 3", 
+            "Habit 4",
+            "Habit 5"
         ]
         st.session_state.memory = {}
         st.session_state.deadlines_df = pd.DataFrame(
@@ -90,7 +90,7 @@ if 'data_loaded' not in st.session_state:
 col_title, col_year, col_month = st.columns([2, 1, 1], vertical_alignment="bottom")
 
 with col_title:
-    st.title("Monthly Operating System ⚡")
+    st.title("Daily Habit Tracker Website ⚡")
 with col_year:
     selected_year = st.selectbox("Year", range(2024, 2030), index=2) 
 with col_month:
