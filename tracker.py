@@ -4,24 +4,32 @@ import plotly.graph_objects as go
 import plotly.express as px
 import datetime
 import calendar
-import pickle
-import os
+import requests
+import io
 
 # --- PAGE SETUP ---
 st.set_page_config(layout="wide", page_title="Dark Mode Tracker", page_icon="🌙")
 
-# --- PERMANENT STORAGE SYSTEM ---
-DATA_FILE = "tracker_data.pkl"
+# --- CLOUD STORAGE SYSTEM (JSONBin) ---
+# We pull these securely from Streamlit's secret vault
+API_KEY = st.secrets["JSONBIN_KEY"]
+BIN_ID = st.secrets["JSONBIN_ID"]
+HEADERS = {
+    'Content-Type': 'application/json',
+    'X-Master-Key': API_KEY
+}
+URL = f"https://api.jsonbin.io/v3/b/{BIN_ID}"
 
 def save_data():
-    """Takes the current session state and saves it to a local file."""
+    """Pushes the current session state to the JSONBin cloud."""
+    # Convert DataFrames to JSON strings so they can be transmitted
     data_to_save = {
         'habit_list': st.session_state.habit_list,
-        'memory': st.session_state.memory,
-        'deadlines_df': st.session_state.deadlines_df
+        'memory': {k: v.to_json() for k, v in st.session_state.memory.items()},
+        'deadlines_df': st.session_state.deadlines_df.to_json(date_format='iso')
     }
-    with open(DATA_FILE, 'wb') as f:
-        pickle.dump(data_to_save, f)
+    # Send the PUT request to overwrite the bin with new data
+    requests.put(URL, json=data_to_save, headers=HEADERS)
 
 # --- CORE ALGORITHM: STREAK CALCULATOR ---
 def calculate_longest_streak(df):
@@ -38,15 +46,30 @@ def calculate_longest_streak(df):
         streaks.append(current_max)
     return streaks
 
-# --- 1. INITIALIZE DATABASE & LOAD FROM DISK ---
+# --- 1. INITIALIZE DATABASE & LOAD FROM CLOUD ---
 if 'data_loaded' not in st.session_state:
-    if os.path.exists(DATA_FILE):
-        with open(DATA_FILE, 'rb') as f:
-            saved_data = pickle.load(f)
-            st.session_state.habit_list = saved_data['habit_list']
-            st.session_state.memory = saved_data['memory']
-            st.session_state.deadlines_df = saved_data['deadlines_df']
-    else:
+    try:
+        # Try to fetch existing data from the cloud
+        response = requests.get(URL, headers=HEADERS)
+        if response.status_code == 200:
+            cloud_data = response.json()['record']
+            
+            st.session_state.habit_list = cloud_data['habit_list']
+            
+            # Reconstruct the memory dictionaries back into Pandas DataFrames
+            st.session_state.memory = {
+                k: pd.read_json(io.StringIO(v)) for k, v in cloud_data['memory'].items()
+            }
+            
+            # Reconstruct deadlines and ensure the date format is correct
+            deadlines = pd.read_json(io.StringIO(cloud_data['deadlines_df']))
+            deadlines['Deadline'] = pd.to_datetime(deadlines['Deadline']).dt.date
+            st.session_state.deadlines_df = deadlines
+        else:
+            raise ValueError("Bin empty or not found")
+            
+    except Exception as e:
+        # If it fails (or first time running), load the defaults
         st.session_state.habit_list = [
             "Work on MineGuard 🛠️", 
             "Pandas/SQL Module 💻", 
@@ -59,6 +82,8 @@ if 'data_loaded' not in st.session_state:
             columns=["Done", "Task", "Deadline"],
             data=[[False, "Submit Microeconomics Assignment", datetime.date.today() + datetime.timedelta(days=3)]]
         )
+        save_data() # Instantly save defaults to the cloud
+        
     st.session_state.data_loaded = True
 
 # --- 2. COMPRESSED HEADER & TIME MACHINE ---
